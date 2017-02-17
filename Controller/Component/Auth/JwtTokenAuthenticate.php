@@ -20,10 +20,10 @@ App::uses('BaseAuthenticate', 'Controller/Component/Auth');
  *	)
  * }}}
  *
- * @author Ceeram, Florian Krämer, Ronald Chaplin
- * @copyright Ceeram, Florian Krämer, Ronald Chaplin
+ * @author Ceeram, Florian Krämer, Ronald Chaplin, Federico Radeljak
+ * @copyright Ceeram, Florian Krämer, Ronald Chaplin, Federico Radeljak
  * @license MIT
- * @link https://github.com/ceeram/Authenticate
+ * @link https://github.com/fradeljak/cakephp2-jwt-auth
  */
 
 class JwtTokenAuthenticate extends BaseAuthenticate
