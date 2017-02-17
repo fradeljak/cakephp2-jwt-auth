@@ -5,19 +5,16 @@ App::uses('BaseAuthenticate', 'Controller/Component/Auth');
  * An authentication adapter for AuthComponent.  Provides the ability to authenticate using a Json Web Token
  *
  * {{{
- *	$this->Auth->authenticate = array(
- *		'Authenticate.Token' => array(
- *			'fields' => array(
+ *	$this->Auth->authenticate = [
+ *		'JwtAuth.JwtToken' => [
+ *			'fields' => [
  *				'username' => 'username',
- *				'password' => 'password',
- *				'token' => 'public_key',
- *			),
+ *			],
  *			'parameter' => '_token',
- *			'header' => 'X-MyApiTokenHeader',
  *			'userModel' => 'User',
- *			'scope' => array('User.active' => 1)
- *		)
- *	)
+ *			'scope' => ['User.active' => 1]
+ *		]
+ *	]
  * }}}
  *
  * @author Ceeram, Florian Krämer, Ronald Chaplin, Federico Radeljak
@@ -34,32 +31,30 @@ class JwtTokenAuthenticate extends BaseAuthenticate
  *
  * - `fields` The fields to use to identify a user by.
  * - `parameter` The url parameter name of the token.
- * - `header` The token header value.
  * - `userModel` The model name of the User, defaults to User.
  * - `scope` Additional conditions to use when looking up and authenticating users,
  *    i.e. `array('User.is_active' => 1).`
- * - `recursive` The value of the recursive key passed to find(). Defaults to 0.
  * - `contain` Extra models to contain and store in session.
- * - `pepper` The public pepper that clients would use to encrypt their token payload
+ * - `key` The kay that clients would use to encrypt their token payload
  *
  * @var array
  */
-	public $settings = array(
-		'fields' => array(
-			'username' => 'username',
-			'token' => 'token'
-		),
-		'parameter' => '_token',
-		'header' => 'X_JSON_WEB_TOKEN',
-		'userModel' => 'User',
-		'scope' => array(),
-		'recursive' => 0,
-		'contain' => null,
-		'pepper' => '123'
-	);
+    public $settings = [
+        'fields' => [
+            'username' => 'username'
+        ],
+        'parameter' => '_token',
+        'header' => 'authorization',
+        'prefix' => 'bearer',
+        'userModel' => 'User',
+        'queryDatasource' => true,
+        'scope' => [],
+        'contain' => null,
+        'key' => null
+    ];
 
-/**
- * Constructor
+    /**
+     * Constructor
  *
  * @param ComponentCollection $collection The Component collection used on this request.
  * @param array $settings Array of settings to use.
@@ -90,64 +85,105 @@ class JwtTokenAuthenticate extends BaseAuthenticate
  * @return mixed Either false or an array of user information
  */
 	public function getUser(CakeRequest $request) {
-		$token = $this->_getToken($request);
-		if ($token) {
-			return $this->_findUser($token);
-		}
-		return false;
+        $payload = $this->getPayload($request);
+        if (empty($payload)) {
+            return false;
+        }
+        if (!$this->settings['queryDatasource']) {
+            return json_decode(json_encode($payload), true);
+        }
+        if (!isset($payload->sub)) {
+            return false;
+        }
+		$user = $this->_findUser($payload->sub);
+		if (!$user) {
+            return false;
+        }
+        return $user;
 	}
 
 	/**
 	 * @param CakeRequest $request
 	 * @return mixed
 	 */
-	private function _getToken(CakeRequest $request)
+	private function getToken(CakeRequest $request)
 	{
-		if (!empty($this->settings['header'])) {
-			$token = $request->header($this->settings['header']);
-			if ($token) {
-				return $token;
-			}
+	    $settings = $this->settings;
+		if (!empty($settings['header'])) {
+			$header = $request->header($settings['header']);
+			if ($header) {
+			    return str_ireplace($settings['prefix'].' ', '', $header);
+            }
 		}
 
-		if (!empty($this->settings['parameter']) && !empty($request->query[$this->settings['parameter']])) {
-			return $request->query[$this->settings['parameter']];
+		if (!empty($settings['parameter']) && !empty($request->query[$settings['parameter']])) {
+			return $request->query[$settings['parameter']];
 		}
 		return false;
 
 	}
 
-/**
- * Find a user record.
- *
- * @param string $token
- * @param string $password
- * @return Mixed Either false on failure, or an array of user data.
- */
-	public function _findUser($token, $password = null)
-	{
-		$token = JWT::decode($token, $this->settings['pepper'], array('HS256'));
+    /**
+     * Decode JWT token.
+     *
+     * @param string $token JWT token to decode.
+     *
+     * @return object|null The JWT's payload as a PHP object, null on failure.
+     */
+    protected function _decode($token)
+    {
+        $salt = Configure::read('Security.salt');
+        try {
+            $payload = JWT::decode($token, $this->settings['key'] ?: $salt, ['HS256']);
+            return $payload;
+        } catch (Exception $e) {
+            if (Configure::read('debug')) {
+                throw $e;
+            }
+            $this->_error = $e;
+        }
+    }
 
-		if (isset($token->record)) {
-			// Trick to convert object of stdClass to array. Typecasting to
-			// array doesn't convert property values which are themselves objects.
-			return json_decode(json_encode($token->record), true);
-		}
-		$userModel = $this->settings['userModel'];
+    /**
+     * Get payload data.
+     *
+     * @param CakeRequest $request Request instance
+     *
+     * @return object|null Payload object on success, null on failurec
+     */
+    protected function getPayload($request)
+    {
+        $payload = null;
+        $token = $this->getToken($request);
+        if ($token) {
+            $payload = $this->_decode($token);
+        }
+        return $this->_payload = $payload;
+    }
+
+
+    /**
+     * Find a user record.
+     *
+     * @param string $id
+     * @param string $password
+     * @return Mixed Either false on failure, or an array of user data.
+     */
+    public function _findUser($id, $password = null)
+    {
+        $userModel = $this->settings['userModel'];
 		list($plugin, $model) = pluginSplit($userModel);
 
 		$fields = $this->settings['fields'];
-		$conditions = array(
-			$model . '.' . $fields['username'] => $token->user->name,
-			$model . '.' . $fields['token'] => $token->user->token
-		);
+		$conditions = [
+            $model . '.' . $fields['id'] => $id
+        ];
 
-		if (!empty($this->settings['scope'])) {
+        if (!empty($this->settings['scope'])) {
 			$conditions = array_merge($conditions, $this->settings['scope']);
 		}
 		$result = ClassRegistry::init($userModel)->find('first', array(
 			'conditions' => $conditions,
-			'recursive' => (int)$this->settings['recursive'],
 			'contain' => $this->settings['contain'],
 		));
 
