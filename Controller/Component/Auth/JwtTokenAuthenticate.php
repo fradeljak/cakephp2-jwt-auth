@@ -174,9 +174,8 @@ class JwtTokenAuthenticate extends BaseAuthenticate
         $userModel = $this->settings['userModel'];
 		list($plugin, $model) = pluginSplit($userModel);
 
-		$fields = $this->settings['fields'];
 		$conditions = [
-            $model . '.' . $fields['id'] => $id
+            $model . '.id' => $id
         ];
 
         if (!empty($this->settings['scope'])) {
