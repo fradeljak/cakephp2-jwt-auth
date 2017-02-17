@@ -1,5 +1,5 @@
 {
-    "name": "t73biz/cakephp2-jwt-auth",
+    "name": "fradeljak/cakephp2-jwt-auth",
     "type": "cakephp-plugin",
     "description": "Cakephp 2 JWT Authentication",
     "keywords":[
@@ -8,7 +8,7 @@
         "authentication",
         "jwt"
     ],
-    "homepage": "http://github.com/t73biz/cakephp2-jwt-auth",
+    "homepage": "http://github.com/fradeljak/cakephp2-jwt-auth",
     "license": "MIT",
     "authors": [
         {
@@ -17,7 +17,10 @@
         },
         {
             "name": "Florian Krämer"
-        }
+        },
+		{
+			"name": "Federico Radeljak"
+		}
     ],
     "require": {
         "firebase/php-jwt": "~2.0",
